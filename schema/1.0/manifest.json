@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://h2a.dev/schema/1.0/manifest.json",
-  "title": "H2A Manifest",
+  "$id": "https://h2amacp.inferise.com/schema/1.0/manifest.json",
+  "title": "H2A MCP Manifest",
   "description": "Meta-schema for an H2A manifest: the per-(org x surface) declaration of which contracts, which methods of each, and which binding version are live. The manifest's declared methods are the single source of truth for what is callable; a method the manifest omits never appears to the agent. Lives at org/<org>/<surface>/manifest.json. Part of H2A spec version 1.0.",
   "type": "object",
   "additionalProperties": false,
