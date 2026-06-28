@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://h2a.dev/schema/1.0/contract.json",
+  "title": "H2A Contract",
+  "description": "Meta-schema for an H2A contract: the abstract, shared tool interface for a category. Authored once per category and reused across every org and surface that implements it. A contract defines the full menu of methods and their I/O; manifests declare per-(org x surface) subsets, and bindings implement them. Part of H2A spec version 1.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "id", "version", "methods"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this meta-schema."
+    },
+    "kind": {
+      "const": "contract",
+      "description": "Artifact discriminator."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*$",
+      "description": "Category identifier, e.g. 'banking'. Must match the filename stem before '@'."
+    },
+    "version": {
+      "$ref": "#/$defs/semver",
+      "description": "Interface version. Bumps when a method or param/return/error schema is added, changed, or renamed. Must match the '@<version>' in the filename."
+    },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "required": {
+      "type": "array",
+      "description": "Optional conformance core: method names every implementing manifest MUST declare. Enables the 'contract.required subset of manifest.methods' floor.",
+      "items": { "$ref": "#/$defs/methodName" },
+      "uniqueItems": true
+    },
+    "methods": {
+      "type": "object",
+      "description": "The full set of methods this category defines, keyed by method name.",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/methodName" },
+      "additionalProperties": { "$ref": "#/$defs/method" }
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "MAJOR.MINOR version line for the interface."
+    },
+    "methodName": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*$"
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["params", "returns"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "One-line, agent-facing description of what the method does."
+        },
+        "params": {
+          "$ref": "#/$defs/schemaObject",
+          "description": "JSON-Schema-style object describing the call parameters. The names here are the only valid {{tokens}} a binding may inject."
+        },
+        "returns": {
+          "$ref": "#/$defs/schemaObject",
+          "description": "JSON-Schema-style object describing the result. The property names here are the only valid output fields a binding may extract."
+        },
+        "errors": {
+          "type": "array",
+          "description": "The closed set of error codes this method may raise. A binding may only map a recognized failure to one of these codes.",
+          "items": { "$ref": "#/$defs/error" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "Stable, machine-readable error code, e.g. INSUFFICIENT_FUNDS."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable default explanation."
+        }
+      }
+    },
+    "schemaObject": {
+      "type": "object",
+      "description": "A constrained JSON-Schema subset. Must declare a type; object types declare properties (+ optional required).",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["object", "string", "number", "integer", "boolean", "array"]
+        },
+        "description": { "type": "string" },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/schemaObject" }
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "items": { "$ref": "#/$defs/schemaObject" },
+        "enum": { "type": "array" },
+        "format": { "type": "string" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "object" } } },
+          "then": { "required": ["properties"] }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://h2a.dev/schema/1.0/binding.json",
+  "title": "H2A Binding",
+  "description": "Meta-schema for an H2A binding: a recording that implements a contract's methods for one (org x surface). A binding is authored once by recording in-page input, output, and actions; it is the concrete, private implementation the orchestrator runs. Lives at org/<org>/<surface>/<contract>@<version>.json. Part of H2A spec version 1.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "org", "surface", "contract", "satisfiesContract", "version", "methods"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "kind": { "const": "binding", "description": "Artifact discriminator." },
+    "org": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "surface": { "$ref": "surface.json" },
+    "contract": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*$",
+      "description": "Contract category this binding implements. Must match the filename stem before '@'."
+    },
+    "satisfiesContract": {
+      "$ref": "#/$defs/semver",
+      "description": "The exact contract version this recording implements. Must equal the manifest's pinned contract version."
+    },
+    "version": {
+      "$ref": "#/$defs/semver",
+      "description": "Binding version. Bumps when the recording changes (redesign, relocator, flow fix). Free to move under a fixed satisfiesContract. Must match the '@<version>' in the filename."
+    },
+    "methods": {
+      "type": "object",
+      "description": "One recording per implemented method, keyed by method name. Keys must equal the manifest's declared methods for this contract.",
+      "minProperties": 1,
+      "propertyNames": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+      "additionalProperties": { "$ref": "#/$defs/recording" }
+    }
+  },
+  "$defs": {
+    "semver": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+
+    "recording": {
+      "type": "object",
+      "description": "The captured step sequence for one method, plus the error map applied during execution.",
+      "additionalProperties": false,
+      "required": ["steps"],
+      "properties": {
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/step" }
+        },
+        "errors": {
+          "type": "array",
+          "description": "Maps recognized failure conditions to contract error codes. A raised code MUST be one of the codes declared for this method in the contract.",
+          "items": { "$ref": "#/$defs/errorRule" }
+        }
+      }
+    },
+
+    "step": {
+      "type": "object",
+      "description": "One recorded action. The 'action' discriminator selects which fields apply.",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "enum": ["navigate", "click", "input", "select", "submit", "waitFor", "assert", "read"]
+        },
+        "note": { "type": "string", "description": "Optional human label captured at record time." },
+        "url": { "type": "string", "description": "navigate: absolute or relative URL. May contain {{param}} tokens." },
+        "target": {
+          "$ref": "#/$defs/locatorSet",
+          "description": "Ordered, multi-strategy locator for the element. Required for click/input/select/submit/read and for waitFor/assert when condition is selector-based."
+        },
+        "value": {
+          "type": "string",
+          "description": "input/select: the value to enter. Use {{paramName}} to inject a contract param (the only valid bind mechanism for inputs). Literal text is allowed for fixed values."
+        },
+        "wait": {
+          "$ref": "#/$defs/waitCondition",
+          "description": "waitFor: the synchronization condition. Also allowed on any step as a pre-condition to satisfy before the step runs."
+        },
+        "assert": {
+          "$ref": "#/$defs/assertion",
+          "description": "assert: condition that must hold, else the step fails (and may map to an error)."
+        },
+        "extract": {
+          "$ref": "#/$defs/extraction",
+          "description": "read: pull a value from the page into a named return field (the output side of the bind map)."
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "action": { "const": "navigate" } } }, "then": { "required": ["url"] } },
+        { "if": { "properties": { "action": { "const": "click" } } }, "then": { "required": ["target"] } },
+        { "if": { "properties": { "action": { "const": "input" } } }, "then": { "required": ["target", "value"] } },
+        { "if": { "properties": { "action": { "const": "select" } } }, "then": { "required": ["target", "value"] } },
+        { "if": { "properties": { "action": { "const": "submit" } } }, "then": { "required": ["target"] } },
+        { "if": { "properties": { "action": { "const": "waitFor" } } }, "then": { "required": ["wait"] } },
+        { "if": { "properties": { "action": { "const": "assert" } } }, "then": { "required": ["assert"] } },
+        { "if": { "properties": { "action": { "const": "read" } } }, "then": { "required": ["target", "extract"] } }
+      ]
+    },
+
+    "locatorSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locators"],
+      "properties": {
+        "locators": {
+          "type": "array",
+          "description": "Candidate locators in priority order. Replay tries each in turn until one resolves to a unique element. Order from most resilient (role/testid) to most brittle (css/xpath).",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/locator" }
+        }
+      }
+    },
+
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "value"],
+      "properties": {
+        "strategy": {
+          "enum": ["role", "testid", "label", "text", "css", "xpath"],
+          "description": "role=ARIA role; testid=stable test attribute; label=associated form label; text=visible text; css/xpath=raw selectors."
+        },
+        "value": {
+          "type": "string",
+          "description": "Selector or value for the chosen strategy (e.g. role -> 'button', css -> '#amount')."
+        },
+        "name": {
+          "type": "string",
+          "description": "Accessible name / additional qualifier (e.g. role 'button' name 'Transfer money')."
+        }
+      }
+    },
+
+    "waitCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["selector", "selectorGone", "url", "networkIdle", "timeout"],
+          "description": "selector=element present; selectorGone=element removed; url=location matches; networkIdle=no in-flight requests; timeout=fixed delay."
+        },
+        "target": { "$ref": "#/$defs/locatorSet", "description": "Element for selector / selectorGone." },
+        "url": { "type": "string", "description": "URL or pattern for type 'url'. May contain {{param}} tokens." },
+        "timeoutMs": { "type": "integer", "minimum": 0, "description": "Max wait (or fixed delay for type 'timeout'). Exceeding it is a failure." }
+      }
+    },
+
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["visible", "absent", "textEquals", "textContains", "urlMatches"]
+        },
+        "target": { "$ref": "#/$defs/locatorSet" },
+        "value": { "type": "string", "description": "Expected text/url; may contain {{param}} tokens." }
+      }
+    },
+
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "from"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Return-schema property this value populates. MUST be a property of the method's contract 'returns'."
+        },
+        "from": {
+          "enum": ["text", "value", "attribute"],
+          "description": "Where to read: visible text, form value, or an attribute."
+        },
+        "attribute": { "type": "string", "description": "Attribute name when from='attribute'." },
+        "as": {
+          "enum": ["string", "number", "integer", "boolean"],
+          "description": "Coerce the captured string to this return type."
+        }
+      }
+    },
+
+    "errorRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["when", "raise"],
+      "properties": {
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The condition that signals this error. Exactly one form per rule.",
+          "properties": {
+            "selectorVisible": { "$ref": "#/$defs/locatorSet" },
+            "textContains": { "type": "string" },
+            "stepTimeout": { "type": "boolean" },
+            "urlMatches": { "type": "string" }
+          }
+        },
+        "raise": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "Contract error code to raise. Validated against the contract method's declared errors at publish time."
+        }
+      }
+    }
+  }
+}
